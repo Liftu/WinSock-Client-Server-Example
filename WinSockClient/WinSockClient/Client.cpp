@@ -46,24 +46,33 @@ bool Client::Disconnect()
 bool Client::Send(std::string data)
 {
 	const unsigned char* dataChar = (unsigned char*)data.c_str();
-	short networkLen = htons(data.size());
-	return send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
-		&& send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0) == (int)data.size();
+	unsigned long networkLen = htonl(data.size());
+
+	if (send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
+		return false;
+
+	unsigned long sentSize = 0;
+	for (size_t i = 0; i < data.size(); i += 2048)
+	{
+		sentSize += send(m_socket, reinterpret_cast<const char*>(dataChar+i), ((data.size() - i) < 2048 ? data.size() % 2048 : 2048), 0);
+	}
+		
+	return (sentSize == (unsigned long)data.size());
 }
 
 bool Client::Receive(std::vector<unsigned char>& buffer)
 {
-	unsigned short expectedSize;
+	unsigned long expectedSize;
 	int pending = recv(m_socket, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
-	if (pending <= 0 || pending != sizeof(unsigned short))
+	if (pending <= 0 || pending != sizeof(unsigned long))
 	{
 		//!< Erreur
 		return false;
 	}
-
-	expectedSize = ntohs(expectedSize);
+	expectedSize = ntohl(expectedSize);
 	buffer.resize(expectedSize);
-	int receivedSize = 0;
+
+	unsigned long receivedSize = 0;
 	do {
 		int ret = recv(m_socket, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
 		if (ret <= 0)

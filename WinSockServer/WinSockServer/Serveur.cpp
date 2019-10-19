@@ -57,25 +57,39 @@ bool Serveur::Stop()
 
 bool Serveur::Send(std::string data)
 {
+	//const unsigned char* dataChar = (unsigned char*)data.c_str();
+	//short networkLen = htons(data.size());
+	//return send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
+	//	&& send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0) == (int)data.size();
+
 	const unsigned char* dataChar = (unsigned char*)data.c_str();
-	short networkLen = htons(data.size());
-	return send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
-		&& send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0) == (int)data.size();
+	unsigned long networkLen = htonl(data.size());
+
+	if (send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
+		return false;
+
+	unsigned long sentSize = 0;
+	for (size_t i = 0; i < data.size(); i += 2048)
+	{
+		sentSize += send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0);
+	}
+
+	return (sentSize == (unsigned long)data.size());
 }
 
 bool Serveur::Receive(std::vector<unsigned char>& buffer)
 {
-	unsigned short expectedSize;
+	unsigned long expectedSize;
 	int pending = recv(m_socket, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
 	if (pending <= 0 || pending != sizeof(unsigned short))
 	{
 		//!< Erreur
 		return false;
 	}
-
-	expectedSize = ntohs(expectedSize);
+	expectedSize = ntohl(expectedSize);
 	buffer.resize(expectedSize);
-	int receivedSize = 0;
+
+	unsigned long receivedSize = 0;
 	do {
 		int ret = recv(m_socket, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
 		if (ret <= 0)
@@ -113,20 +127,19 @@ void Serveur::AcceptClients()
 					/////// Début de la boucle d'événement du thread ///////
 					/////// Receive request ///////
 					std::vector<unsigned char> buffer;
-					unsigned short expectedSize;
+					unsigned long expectedSize;
 					int pending = recv(newClient, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
-					if (pending <= 0 || pending != sizeof(unsigned short))
+					if (pending <= 0 || pending != sizeof(unsigned long))
 					{
 						//!< Erreur
 						std::cout << "[" << clientAddress << ":" << clientPort << "] Connection closed." << std::endl;
 						Sockets::CloseSocket(newClient);
 						break;
 					}
-
-					expectedSize = ntohs(expectedSize);
+					expectedSize = ntohl(expectedSize);
 					buffer.resize(expectedSize);
-					int receivedSize = 0;
 
+					unsigned long receivedSize = 0;
 					do {
 						int ret = recv(newClient, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
 						if (ret <= 0)
@@ -161,13 +174,37 @@ void Serveur::AcceptClients()
 					std::cout << "[" << clientAddress << ":" << clientPort << "] => " << message << std::endl;
 
 					/////// Send answer ///////
+					//const unsigned char* dataChar = (unsigned char*)reponse.c_str();
+					//short networkLen = htons(reponse.size());
+					//if (!(send(newClient, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
+					//	&& send(newClient, reinterpret_cast<const char*>(dataChar), reponse.size(), 0) == (int)reponse.size()))
+					//{
+					//	//!< Erreur
+					//	//buffer.clear();
+					//	std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
+					//	Sockets::CloseSocket(newClient);
+					//	break;
+					//}
+
 					const unsigned char* dataChar = (unsigned char*)reponse.c_str();
-					short networkLen = htons(reponse.size());
-					if (!(send(newClient, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
-						&& send(newClient, reinterpret_cast<const char*>(dataChar), reponse.size(), 0) == (int)reponse.size()))
+					unsigned long networkLen = htonl(reponse.size());
+
+					if (send(newClient, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
 					{
 						//!< Erreur
-						//buffer.clear();
+						std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer size." << std::endl;
+						Sockets::CloseSocket(newClient);
+						break;
+					}
+
+					unsigned long sentSize = 0;
+					for (size_t i = 0; i < reponse.size(); i += 2048)
+					{
+						sentSize += send(newClient, reinterpret_cast<const char*>(dataChar+i), ((reponse.size() - i) < 2048 ? reponse.size() % 2048 : 2048), 0);
+					}
+					if (sentSize != (unsigned long)reponse.size())
+					{
+						//!< Erreur
 						std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
 						Sockets::CloseSocket(newClient);
 						break;
