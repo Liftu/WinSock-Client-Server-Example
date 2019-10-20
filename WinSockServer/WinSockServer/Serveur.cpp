@@ -161,9 +161,7 @@ void Serveur::AcceptClients()
 					std::string reponse;
 					if (message == "exit")
 					{
-						std::cout << "[" << clientAddress << ":" << clientPort << "] Disconnected. " << std::endl;
-						closesocket(newClient);
-						break;
+						reponse = "Ok good bye !";
 					}
 					else if (message == "Hello world !")
 						reponse = "Welcome man ! ";
@@ -207,6 +205,13 @@ void Serveur::AcceptClients()
 						//!< Erreur
 						std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
 						Sockets::CloseSocket(newClient);
+						break;
+					}
+
+					if (message == "exit")
+					{
+						std::cout << "[" << clientAddress << ":" << clientPort << "] Disconnected. " << std::endl;
+						closesocket(newClient);
 						break;
 					}
 					/////// Fin de la boucle d'événement du thread ///////
