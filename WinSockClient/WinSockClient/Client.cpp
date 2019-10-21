@@ -2,12 +2,12 @@
 
 Client::Client()
 {
-	if (!Sockets::Start())
+	if (!Sockets::start())
 	{
 		/*std::ostringstream error;
-		error << "Erreur creation socket [" << Sockets::GetError() << "]";
+		error << "Error socket creation [" << Sockets::GetError() << "]";
 		throw std::runtime_error(error.str());*/
-		std::cout << "Erreur creation socket [" << this->GetLastError() << "]";
+		std::cout << "Error socket creation [" << this->GetLastError() << "]";
 	}
 	else
 	{
@@ -15,9 +15,9 @@ Client::Client()
 		if (m_socket == INVALID_SOCKET)
 		{
 			/*std::ostringstream error;
-			error << "Erreur initialisation socket [" << Sockets::GetError() << "]";
+			error << "Error socket initialization [" << Sockets::GetError() << "]";
 			throw std::runtime_error(error.str());*/
-			std::cout << "Erreur initialisation socket [" << this->GetLastError() << "]";
+			std::cout << "Error socket initialization [" << this->GetLastError() << "]";
 		}
 	}
 }
@@ -25,7 +25,7 @@ Client::Client()
 Client::~Client()
 {
 	Disconnect();
-	Sockets::Release();
+	Sockets::release();
 }
 
 bool Client::Connect(const std::string& ipaddress, unsigned short port)
@@ -40,12 +40,11 @@ bool Client::Connect(const std::string& ipaddress, unsigned short port)
 
 bool Client::Disconnect()
 {
-	return Sockets::CloseSocket(m_socket);
+	return Sockets::closeSocket(m_socket);
 }
 
-bool Client::Send(std::string data)
+bool Client::Send(std::vector<unsigned char>& data)
 {
-	const unsigned char* dataChar = (unsigned char*)data.c_str();
 	unsigned long networkLen = htonl(data.size());
 
 	if (send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
@@ -54,10 +53,17 @@ bool Client::Send(std::string data)
 	unsigned long sentSize = 0;
 	for (size_t i = 0; i < data.size(); i += 2048)
 	{
-		sentSize += send(m_socket, reinterpret_cast<const char*>(dataChar+i), ((data.size() - i) < 2048 ? data.size() % 2048 : 2048), 0);
+		sentSize += send(m_socket, reinterpret_cast<const char*>(data.data() + i), ((data.size() - i) < 2048 ? data.size() % 2048 : 2048), 0);
 	}
-		
+
 	return (sentSize == (unsigned long)data.size());
+}
+
+
+bool Client::SendText(std::string text)
+{
+	std::vector<unsigned char> data(text.begin(), text.end());
+	return Send(data);
 }
 
 bool Client::Receive(std::vector<unsigned char>& buffer)

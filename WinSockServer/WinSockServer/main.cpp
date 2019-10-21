@@ -10,10 +10,10 @@ int main()
 	Serveur serveur;
 	if (!serveur.Start(port))
 	{
-		std::cout << "Erreur lancement serveur : " << serveur.GetLastError() << std::endl;
+		std::cout << "Error starting server : " << serveur.GetLastError() << std::endl;
 		return 0;
 	}
-	std::cout << "Serveur demarre sur le port : " << port << std::endl;
+	std::cout << "Server running on port : " << port << std::endl;
 	serveur.AcceptClients();
 	serveur.Stop();
 	return 0;

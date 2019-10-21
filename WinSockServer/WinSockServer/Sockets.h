@@ -8,11 +8,11 @@
 
 namespace Sockets
 {
-	bool Start();
-	void Release();
-	int GetError();
-	bool CloseSocket(SOCKET socket);
-	std::string GetAddress(const sockaddr_in& addr);
+	bool start();
+	void release();
+	int getError();
+	bool closeSocket(SOCKET socket);
+	std::string getAddress(const sockaddr_in& addr);
 }
 
 #endif //SOCKETS_H

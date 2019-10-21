@@ -5,10 +5,10 @@
 
 namespace Sockets
 {
-	bool Start();
-	void Release();
-	int GetError();
-	bool CloseSocket(SOCKET socket);
+	bool start();
+	void release();
+	int getError();
+	bool closeSocket(SOCKET socket);
 }
 
 #endif //SOCKETS_H

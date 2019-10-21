@@ -11,10 +11,10 @@ int main()
 	Client client;
 	if (!client.Connect(ip, port))
 	{
-		std::cout << "Erreur connection : " << client.GetLastError() << std::endl;
+		std::cout << "Error connection : " << client.GetLastError() << std::endl;
 		return 0;
 	}
-	std::cout << "Client connecte sur : " << ip << ":" << port << std::endl;
+	std::cout << "Client connected on : " << ip << ":" << port << std::endl;
 
 	std::string message;
 	while (message != "exit")
@@ -22,16 +22,16 @@ int main()
 		std::cout << "Message to send (\"exit\" to quit): ";
 		std::getline(std::cin, message);
 
-		if (!client.Send(message))
+		if (!client.SendText(message))
 		{
-			std::cout << "Erreur lors de l'envoi du message au serveur : \"" << message << "\". Erreur : " << client.GetLastError() << std::endl;
+			std::cout << "Error while sending the message to the server : \"" << message << "\". Error : " << client.GetLastError() << std::endl;
 		}
 		else
 		{
 			std::vector<unsigned char> buffer;
 			if (!client.Receive(buffer))
 			{
-				std::cout << "Erreur lors de la reception de la reponse du serveur : " << client.GetLastError() << std::endl;
+				std::cout << "Error while receiving the server response : " << client.GetLastError() << std::endl;
 			}
 			else
 			{

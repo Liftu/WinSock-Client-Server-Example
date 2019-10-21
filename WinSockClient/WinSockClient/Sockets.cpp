@@ -2,20 +2,20 @@
 
 namespace Sockets
 {
-	bool Start()
+	bool start()
 	{
 		WSAData wsaData;
 		return WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
 	}
-	void Release()
+	void release()
 	{
 		WSACleanup();
 	}
-	int GetError()
+	int getError()
 	{
 		return WSAGetLastError();
 	}
-	bool CloseSocket(SOCKET s)
+	bool closeSocket(SOCKET s)
 	{
 		return closesocket(s) == 0;
 	}

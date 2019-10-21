@@ -2,12 +2,12 @@
 
 Serveur::Serveur()
 {
-	if (!Sockets::Start())
+	if (!Sockets::start())
 	{
 		/*std::ostringstream error;
-		error << "Erreur creation socket [" << Sockets::GetError() << "]";
+		error << "Error socket creation [" << Sockets::GetError() << "]";
 		throw std::runtime_error(error.str());*/
-		std::cout << "Erreur creation socket [" << this->GetLastError() << "]";
+		std::cout << "Error socket creation [" << this->GetLastError() << "]";
 	}
 	else
 	{
@@ -15,9 +15,9 @@ Serveur::Serveur()
 		if (m_socket == INVALID_SOCKET)
 		{
 			/*std::ostringstream error;
-			error << "Erreur initialisation socket [" << Sockets::GetError() << "]";
+			error << "Error socket initialization [" << Sockets::GetError() << "]";
 			throw std::runtime_error(error.str());*/
-			std::cout << "Erreur initialisation socket [" << this->GetLastError() << "]";
+			std::cout << "Error socket initialization [" << this->GetLastError() << "]";
 		}
 	}
 }
@@ -25,7 +25,11 @@ Serveur::Serveur()
 Serveur::~Serveur()
 {
 	Stop();
-	Sockets::Release();
+	Sockets::release();
+	for (int i = 0; i < m_clientThreads.size(); i++)
+	{
+		m_clientThreads[i].join();
+	}
 }
 
 bool Serveur::Start(unsigned short port)
@@ -38,13 +42,13 @@ bool Serveur::Start(unsigned short port)
 	int serveur = bind(m_socket, (sockaddr*)&m_adresse, sizeof(m_adresse));
 	if (serveur != 0)
 	{
-		std::cout << "Erreur bind : " << this->GetLastError();
+		std::cout << "Error bind : " << this->GetLastError();
 		return false;
 	}
 	serveur = listen(m_socket, SOMAXCONN);
 	if (serveur != 0)
 	{
-		std::cout << "Erreur listen : " << this->GetLastError();
+		std::cout << "Error listen : " << this->GetLastError();
 		return 0;
 	}
 	return true;
@@ -52,36 +56,44 @@ bool Serveur::Start(unsigned short port)
 
 bool Serveur::Stop()
 {
-	return Sockets::CloseSocket(m_socket);
+	return Sockets::closeSocket(m_socket);
 }
 
-bool Serveur::Send(std::string data)
+bool Serveur::Send(SOCKET socket, std::vector<unsigned char>& data)
 {
-	//const unsigned char* dataChar = (unsigned char*)data.c_str();
-	//short networkLen = htons(data.size());
-	//return send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
-	//	&& send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0) == (int)data.size();
-
-	const unsigned char* dataChar = (unsigned char*)data.c_str();
 	unsigned long networkLen = htonl(data.size());
 
-	if (send(m_socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
+	if (send(socket, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
+	{
+		//!< Erreur
 		return false;
+	}
 
 	unsigned long sentSize = 0;
 	for (size_t i = 0; i < data.size(); i += 2048)
 	{
-		sentSize += send(m_socket, reinterpret_cast<const char*>(dataChar), data.size(), 0);
+		sentSize += send(socket, reinterpret_cast<const char*>(data.data() + i), ((data.size() - i) < 2048 ? data.size() % 2048 : 2048), 0);
 	}
-
-	return (sentSize == (unsigned long)data.size());
+	if (sentSize != (unsigned long)data.size())
+	{
+		//!< Erreur
+		return false;
+	}
+	else
+		return true;
 }
 
-bool Serveur::Receive(std::vector<unsigned char>& buffer)
+bool Serveur::SendText(SOCKET socket, std::string text)
+{
+	std::vector<unsigned char> data(text.begin(), text.end());
+	return Send(socket, data);
+}
+
+bool Serveur::Receive(SOCKET socket, std::vector<unsigned char>& buffer)
 {
 	unsigned long expectedSize;
-	int pending = recv(m_socket, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
-	if (pending <= 0 || pending != sizeof(unsigned short))
+	int pending = recv(socket, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
+	if (pending <= 0 || pending != sizeof(unsigned long))
 	{
 		//!< Erreur
 		return false;
@@ -91,7 +103,7 @@ bool Serveur::Receive(std::vector<unsigned char>& buffer)
 
 	unsigned long receivedSize = 0;
 	do {
-		int ret = recv(m_socket, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
+		int ret = recv(socket, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
 		if (ret <= 0)
 		{
 			//!< Erreur
@@ -103,123 +115,81 @@ bool Serveur::Receive(std::vector<unsigned char>& buffer)
 			receivedSize += ret;
 		}
 	} while (receivedSize < expectedSize);
-	return true;
+	
+	return (receivedSize == expectedSize);
 }
 
 void Serveur::AcceptClients()
 {
 	while (1)
 	{
-		sockaddr_in from = { 0 };
-		int addrlen = sizeof(from);
-		SOCKET newClient = accept(m_socket, (SOCKADDR*)(&from), &addrlen);
+		sockaddr_in addr = { 0 };
+		int addrlen = sizeof(addr);
+		SOCKET newClient = accept(m_socket, (SOCKADDR*)(&addr), &addrlen);
 		if (newClient != INVALID_SOCKET)
 		{
 			////////////// Début du thread //////////////
-			std::thread([newClient, from]()
-			{
-				const std::string clientAddress = Sockets::GetAddress(from);
-				const unsigned short clientPort = ntohs(from.sin_port);
-				std::cout << "Connexion de " << clientAddress.c_str() << ":" << clientPort << std::endl;
-				bool connected = true;
-				while (1)
-				{
-					/////// Début de la boucle d'événement du thread ///////
-					/////// Receive request ///////
-					std::vector<unsigned char> buffer;
-					unsigned long expectedSize;
-					int pending = recv(newClient, reinterpret_cast<char*>(&expectedSize), sizeof(expectedSize), 0);
-					if (pending <= 0 || pending != sizeof(unsigned long))
-					{
-						//!< Erreur
-						std::cout << "[" << clientAddress << ":" << clientPort << "] Connection closed." << std::endl;
-						Sockets::CloseSocket(newClient);
-						break;
-					}
-					expectedSize = ntohl(expectedSize);
-					buffer.resize(expectedSize);
-
-					unsigned long receivedSize = 0;
-					do {
-						int ret = recv(newClient, reinterpret_cast<char*>(&buffer[receivedSize]), (expectedSize - receivedSize) * sizeof(unsigned char), 0);
-						if (ret <= 0)
-						{
-							//!< Erreur
-							//buffer.clear();
-							std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR while receiving data." << std::endl;
-							Sockets::CloseSocket(newClient);
-							break;
-						}
-						else
-						{
-							receivedSize += ret;
-						}
-					} while (receivedSize < expectedSize);
-
-					/////// Process request ///////
-					std::string message((const char*)buffer.data(), buffer.size());
-					std::string reponse;
-					if (message == "exit")
-					{
-						reponse = "Ok good bye !";
-					}
-					else if (message == "Hello world !")
-						reponse = "Welcome man ! ";
-					else if (message == "Bye !")
-						reponse = "Take care !";
-					else
-						reponse = "Hey !";
-					std::cout << "[" << clientAddress << ":" << clientPort << "] => " << message << std::endl;
-
-					/////// Send answer ///////
-					//const unsigned char* dataChar = (unsigned char*)reponse.c_str();
-					//short networkLen = htons(reponse.size());
-					//if (!(send(newClient, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) == sizeof(networkLen)
-					//	&& send(newClient, reinterpret_cast<const char*>(dataChar), reponse.size(), 0) == (int)reponse.size()))
-					//{
-					//	//!< Erreur
-					//	//buffer.clear();
-					//	std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
-					//	Sockets::CloseSocket(newClient);
-					//	break;
-					//}
-
-					const unsigned char* dataChar = (unsigned char*)reponse.c_str();
-					unsigned long networkLen = htonl(reponse.size());
-
-					if (send(newClient, reinterpret_cast<const char*>(&networkLen), sizeof(networkLen), 0) != sizeof(networkLen))
-					{
-						//!< Erreur
-						std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer size." << std::endl;
-						Sockets::CloseSocket(newClient);
-						break;
-					}
-
-					unsigned long sentSize = 0;
-					for (size_t i = 0; i < reponse.size(); i += 2048)
-					{
-						sentSize += send(newClient, reinterpret_cast<const char*>(dataChar+i), ((reponse.size() - i) < 2048 ? reponse.size() % 2048 : 2048), 0);
-					}
-					if (sentSize != (unsigned long)reponse.size())
-					{
-						//!< Erreur
-						std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
-						Sockets::CloseSocket(newClient);
-						break;
-					}
-
-					if (message == "exit")
-					{
-						std::cout << "[" << clientAddress << ":" << clientPort << "] Disconnected. " << std::endl;
-						closesocket(newClient);
-						break;
-					}
-					/////// Fin de la boucle d'événement du thread ///////
-				}
-			}).detach();
+			m_clientThreads.push_back(std::thread(&Serveur::threadClient, this, newClient, addr));
+			//std::thread([this, newClient, from]()
+			//{
+			//	old thread
+			//}).detach();
 			////////////// Fin du thread //////////////
 		}
 		else
 			break;
+	}
+}
+
+void Serveur::threadClient(SOCKET client, sockaddr_in addr)
+{
+	const std::string clientAddress = Sockets::getAddress(addr);
+	const unsigned short clientPort = ntohs(addr.sin_port);
+	std::cout << "Connection of " << clientAddress.c_str() << ":" << clientPort << std::endl;
+	bool connected = true;
+	while (1)
+	{
+		/////// Début de la boucle d'événement du thread ///////
+		/////// Receive request ///////
+		std::vector<unsigned char> buffer;
+		if (!Receive(client, buffer))
+		{
+			std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR while receiving data." << std::endl;
+			Sockets::closeSocket(client);
+			break;
+		}
+
+		/////// Process request ///////
+		std::string message((const char*)buffer.data(), buffer.size());
+		std::string reponse;
+		if (message == "exit")
+		{
+			reponse = "Ok good bye !";
+		}
+		else if (message == "Hello world !")
+			reponse = "Welcome man ! ";
+		else if (message == "Bye !")
+			reponse = "Take care !";
+		else
+			reponse = "Hey !";
+		std::cout << "[" << clientAddress << ":" << clientPort << "] => " << message << std::endl;
+
+		/////// Send answer ///////
+		if (!SendText(client, reponse))
+		{
+			//!< Erreur
+			std::cout << "[" << clientAddress << ":" << clientPort << "] : ERROR sending answer." << std::endl;
+			Sockets::closeSocket(client);
+			break;
+		}
+
+		//////// Has exited ? ////////
+		if (message == "exit")
+		{
+			std::cout << "[" << clientAddress << ":" << clientPort << "] Disconnected. " << std::endl;
+			closesocket(client);
+			break;
+		}
+		/////// Fin de la boucle d'événement du thread ///////
 	}
 }
