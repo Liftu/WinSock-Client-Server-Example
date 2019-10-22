@@ -89,6 +89,24 @@ bool Serveur::SendText(SOCKET socket, std::string text)
 	return Send(socket, data);
 }
 
+bool Serveur::SendFile(SOCKET socket, std::string filePath)
+{
+	std::ifstream file;
+	file.open(filePath, std::ios::in | std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	std::streampos fileSize = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::vector<unsigned char> buffer;
+	file.read((char*)buffer.data(), fileSize);
+	file.close();
+
+	return Send(socket, buffer);
+}
+
 bool Serveur::Receive(SOCKET socket, std::vector<unsigned char>& buffer)
 {
 	unsigned long expectedSize;
@@ -117,6 +135,33 @@ bool Serveur::Receive(SOCKET socket, std::vector<unsigned char>& buffer)
 	} while (receivedSize < expectedSize);
 	
 	return (receivedSize == expectedSize);
+}
+
+bool Serveur::ReceiveText(SOCKET socket, std::string &text)
+{
+	std::vector<unsigned char> buffer;
+	bool success = Receive(socket, buffer);
+	text = std::string((const char*)buffer.data(), buffer.size());
+	return success;
+}
+
+bool Serveur::ReceiveFile(SOCKET socket, std::string filePath)
+{
+	std::vector<unsigned char> buffer;
+	Receive(socket, buffer);
+
+	std::ofstream file;
+	file.open(filePath, std::ios::out | std::ios::app | std::ios::binary);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	file.write((const char*)(buffer.data()), buffer.size());
+	buffer.clear();
+	file.close();
+
+	return true;
 }
 
 void Serveur::AcceptClients()
@@ -151,6 +196,8 @@ void Serveur::threadClient(SOCKET client, sockaddr_in addr)
 	{
 		/////// Début de la boucle d'événement du thread ///////
 		/////// Receive request ///////
+		ReceiveFile(client, "tata.txt");
+
 		std::vector<unsigned char> buffer;
 		if (!Receive(client, buffer))
 		{

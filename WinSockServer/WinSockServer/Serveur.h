@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include "Sockets.h"
@@ -18,7 +19,10 @@ public:
 	int GetLastError() { return Sockets::getError(); }
 	bool Send(SOCKET socket, std::vector<unsigned char>& data);
 	bool SendText(SOCKET socket, std::string text);
+	bool SendFile(SOCKET socket, std::string filePath);
 	bool Receive(SOCKET socket, std::vector<unsigned char>& buffer);
+	bool ReceiveText(SOCKET socket, std::string &text);
+	bool ReceiveFile(SOCKET socket, std::string filePath);
 	void AcceptClients();
 
 private:
