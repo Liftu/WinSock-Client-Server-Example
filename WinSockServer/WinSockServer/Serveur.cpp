@@ -26,7 +26,7 @@ Serveur::~Serveur()
 {
 	Stop();
 	Sockets::release();
-	for (int i = 0; i < m_clientThreads.size(); i++)
+	for (size_t i = 0; i < m_clientThreads.size(); i++)
 	{
 		m_clientThreads[i].join();
 	}
@@ -89,6 +89,24 @@ bool Serveur::SendText(SOCKET socket, std::string text)
 	return Send(socket, data);
 }
 
+bool Serveur::SendFile(SOCKET socket, std::string filePath)
+{
+	std::ifstream file;
+	file.open(filePath, std::ios::in | std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	std::streampos fileSize = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::vector<unsigned char> buffer(fileSize);
+	file.read((char*)buffer.data(), fileSize);
+	file.close();
+
+	return Send(socket, buffer);
+}
+
 bool Serveur::Receive(SOCKET socket, std::vector<unsigned char>& buffer)
 {
 	unsigned long expectedSize;
@@ -119,22 +137,44 @@ bool Serveur::Receive(SOCKET socket, std::vector<unsigned char>& buffer)
 	return (receivedSize == expectedSize);
 }
 
+bool Serveur::ReceiveText(SOCKET socket, std::string &text)
+{
+	std::vector<unsigned char> buffer;
+	bool success = Receive(socket, buffer);
+	text = std::string((const char*)buffer.data(), buffer.size());
+	return success;
+}
+
+bool Serveur::ReceiveFile(SOCKET socket, std::string filePath)
+{
+	std::vector<unsigned char> buffer;
+	Receive(socket, buffer);
+
+	std::ofstream file;
+	file.open(filePath, std::ios::out | std::ios::app | std::ios::binary);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	file.write((const char*)(buffer.data()), buffer.size());
+	buffer.clear();
+	file.close();
+
+	return true;
+}
+
 void Serveur::AcceptClients()
 {
-	while (1)
+	while (true)
 	{
 		sockaddr_in addr = { 0 };
 		int addrlen = sizeof(addr);
 		SOCKET newClient = accept(m_socket, (SOCKADDR*)(&addr), &addrlen);
 		if (newClient != INVALID_SOCKET)
 		{
-			////////////// Début du thread //////////////
+			// Call client thread
 			m_clientThreads.push_back(std::thread(&Serveur::threadClient, this, newClient, addr));
-			//std::thread([this, newClient, from]()
-			//{
-			//	old thread
-			//}).detach();
-			////////////// Fin du thread //////////////
 		}
 		else
 			break;
@@ -146,8 +186,8 @@ void Serveur::threadClient(SOCKET client, sockaddr_in addr)
 	const std::string clientAddress = Sockets::getAddress(addr);
 	const unsigned short clientPort = ntohs(addr.sin_port);
 	std::cout << "Connection of " << clientAddress.c_str() << ":" << clientPort << std::endl;
-	bool connected = true;
-	while (1)
+	//bool connected = true;
+	while (true)
 	{
 		/////// Début de la boucle d'événement du thread ///////
 		/////// Receive request ///////

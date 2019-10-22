@@ -66,6 +66,24 @@ bool Client::SendText(std::string text)
 	return Send(data);
 }
 
+bool Client::SendFile(std::string filePath)
+{
+	std::ifstream file;
+	file.open(filePath, std::ios::in | std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	std::streampos fileSize = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::vector<unsigned char> buffer(fileSize);
+	file.read((char*)buffer.data(), fileSize);
+	file.close();
+
+	return Send(buffer);
+}
+
 bool Client::Receive(std::vector<unsigned char>& buffer)
 {
 	unsigned long expectedSize;
@@ -92,5 +110,32 @@ bool Client::Receive(std::vector<unsigned char>& buffer)
 			receivedSize += ret;
 		}
 	} while (receivedSize < expectedSize);
+	return true;
+}
+
+bool Client::ReceiveText(std::string &text)
+{
+	std::vector<unsigned char> buffer;
+	bool success = Receive(buffer);
+	text = std::string((const char*)buffer.data(), buffer.size());
+	return success;
+}
+
+bool Client::ReceiveFile(std::string filePath)
+{
+	std::vector<unsigned char> buffer;
+	Receive(buffer);
+
+	std::ofstream file;
+	file.open(filePath, std::ios::out | std::ios::app | std::ios::binary);
+	if (!file.is_open())
+	{
+		return false;
+	}
+
+	file.write((const char*)(buffer.data()), buffer.size());
+	buffer.clear();
+	file.close();
+
 	return true;
 }
