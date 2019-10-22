@@ -16,8 +16,6 @@ int main()
 	}
 	std::cout << "Client connected on : " << ip << ":" << port << std::endl;
 
-	client.SendFile("toto.txt");
-
 	std::string message;
 	while (message != "exit")
 	{

@@ -77,7 +77,7 @@ bool Client::SendFile(std::string filePath)
 
 	std::streampos fileSize = file.tellg();
 	file.seekg(0, std::ios::beg);
-	std::vector<unsigned char> buffer;
+	std::vector<unsigned char> buffer(fileSize);
 	file.read((char*)buffer.data(), fileSize);
 	file.close();
 
